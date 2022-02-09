@@ -150,7 +150,7 @@ do{
         $EndpointNetIntDownloadStatus = "Healthy"
     }
     PostPerformanceData
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 30
 }
 while(
     $True
