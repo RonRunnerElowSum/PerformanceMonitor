@@ -2,9 +2,9 @@
 $CPUWarningThreshhold = "90"
 #Warning when this amount or less of RAM is remaining
 $RAMWarningThreshhold = "1"
-#Network interface warning threshhold in MBps (multiply MBps by 8 to get Mbps)
-$NetInterfaceUploadWarningThreshhold = "4"
-$NetInterfaceDownloadWarningThreshhold = "5"
+#Network interface warning threshhold in Mbps
+$NetInterfaceUploadWarningThreshhold = "15"
+$NetInterfaceDownloadWarningThreshhold = "30"
 
 function Write-MSPLog {
     Param
@@ -78,7 +78,7 @@ function PostPerformanceData {
     }
 
     $DateTime = Get-Date -Format "MM/dd/yyyy HH:mm"
-    #Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAM`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
+    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAM`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
 
 $SQLCommand = @"
 if exists(SELECT * from Table_CustomerPerformanceData where EndpointSerial='$EndpointSerial')
@@ -119,34 +119,42 @@ if(!(Test-Path -Path "C:\MSP\secret.txt")){
 do{
     [int]$CPUUtilization = Get-CPUUtilization
     [int]$AvailableRAM = Get-AvailableRAM
-    [int]$NetInterfaceUploadUtilizationInMBps = (Get-Counter -Counter "\Network interface(*)\Bytes sent/sec").CounterSamples.CookedValue / 1MB
-    [int]$NetInterfaceDownloadUtilizationInMBps = (Get-Counter -Counter "\Network interface(*)\Bytes received/sec").CounterSamples.CookedValue / 1MB
+    [int]$NetInterfaceUploadUtilizationInBytes = (Get-Counter -Counter "\Network interface(*)\Bytes sent/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1
+    [int]$NetInterfaceUploadUtilizationInMbps = $NetInterfaceUploadUtilizationInBytes / 125000
+    [int]$NetInterfaceDownloadUtilizationInBytes = (Get-Counter -Counter "\Network interface(*)\Bytes received/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1
+    [int]$NetInterfaceDownloadUtilizationInMbps = $NetInterfaceDownloadUtilizationInBytes / 125000
     if($CPUUtilization -ge $CPUWarningThreshhold){
-        $EndpointCPUStatus = "Warning: High Utilization"
         $Top10ProcessesUsingCPU = (Get-Counter -Counter "\Process(*)\% Processor Time").CounterSamples | Select-Object -First 10 | Sort-Object -Property CookedValue -Descending | Format-Table -Property InstanceName, CookedValue -AutoSize
-        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's CPU utilization has peaked $CPUWarningThreshhold% (hit $CPUUtilization) at $(Get-Date)`r`n`r`nTop 10 processes utilizing CPU:`r`n$Top10ProcessesUsingCPU"
+        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's CPU utilization has peaked $CPUWarningThreshhold`% (utilizing $CPUUtilization`%) at $(Get-Date)`r`n`r`nTop 10 processes utilizing CPU:`r`n$Top10ProcessesUsingCPU"
+        $EndpointCPUStatus = "Warning: High Utilization"
     }
     else{
         $EndpointCPUStatus = "Healthy"
     }
     if($AvailableRAM -le $RAMWarningThreshhold){
+        $OSArch = (Get-WmiObject Win32_OperatingSystem).OSArchitecture
+        if($OSArch -eq "32-bit"){
+            $Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet/1MB)}} | Select-Object -First 20
+        }
+        elseif($OSArch -eq "64-bit"){
+            $Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet64 | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet64/1MB)}} | Select-Object -First 20
+        }
+        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's available RAM has gone below $RAMWarningThreshhold`GB (available RAM: $AvailableRAM`GB) at $(Get-Date)`r`n`r`nTop 10 processes utilizing RAM:`r`n$Top20ProcessesUsingRAM"
         $EndpointRAMStatus = "Warning: High Utilization"
-        $Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet64 | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet64/1MB)}} | Select-Object -First 20
-        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's available RAM has gone below $RAMWarningThreshhold GB (available RAM: $AvailableRAM GB) at $(Get-Date)`r`n`r`nTop 10 processes utilizing CPU:`r`n$Top20ProcessesUsingRAM"
     }
     else{
         $EndpointRAMStatus = "Healthy"
     }
-    if($NetInterfaceUploadUtilizationInMBps -ge $NetInterfaceUploadWarningThreshhold){
+    if($NetInterfaceUploadUtilizationInMbps -ge $NetInterfaceUploadWarningThreshhold){
+        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's network interface upload utilization has peaked $NetInterfaceUploadWarningThreshhold`Mbps (utilizing $NetInterfaceUploadUtilizationInMbps`Mbps) at $(Get-Date)"
         $EndpointNetIntUploadStatus = "Warning: High Upload Utilization"
-        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's network interface upload utilization has peaked $NetInterfaceUploadWarningThreshhold MBps (hit $NetInterfaceUploadUtilizationInMBps MBps) at $(Get-Date)"
     }
     else{
         $EndpointNetIntUploadStatus = "Healthy"
     }
-    if($NetInterfaceDownloadUtilizationInMBps -ge $NetInterfaceDownloadWarningThreshhold){
+    if($NetInterfaceDownloadUtilizationInMbps -ge $NetInterfaceDownloadWarningThreshhold){
+        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's network interface download utilization has peaked $NetInterfaceDownloadWarningThreshhold`Mbps (utilizing $NetInterfaceDownloadUtilizationInMbps`Mbps) at $(Get-Date)"
         $EndpointNetIntDownloadStatus = "Warning: High Download Utilization"
-        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's network interface download utilization has peaked $NetInterfaceDownloadWarningThreshhold MBps (hit $NetInterfaceDownloadUtilizationInMBps MBps) at $(Get-Date)"
     }
     else{
         $EndpointNetIntDownloadStatus = "Healthy"
