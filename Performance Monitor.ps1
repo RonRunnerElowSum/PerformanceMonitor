@@ -78,7 +78,7 @@ function PostPerformanceData {
     }
 
     $DateTime = Get-Date -Format "MM/dd/yyyy HH:mm"
-    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
+    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
 
 $SQLCommand = @"
 if exists(SELECT * from Table_CustomerPerformanceData where EndpointSerial='$EndpointSerial')
@@ -116,7 +116,7 @@ do{
     [int]$NetInterfaceDownloadUtilizationInBytes = (Get-Counter -Counter "\Network interface(*)\Bytes received/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1
     [int]$NetInterfaceDownloadUtilizationInMbps = $NetInterfaceDownloadUtilizationInBytes / 125000
     if($CPUUtilization -ge $CPUWarningThreshhold){
-        $Top10ProcessesUsingCPU = (Get-Counter -Counter "\Process(*)\% Processor Time").CounterSamples | Select-Object -First 10 | Sort-Object -Property CookedValue -Descending | Format-Table -Property InstanceName, CookedValue -AutoSize
+        [string]$Top10ProcessesUsingCPU = (Get-Counter -Counter "\Process(*)\% Processor Time").CounterSamples | Select-Object -First 10 | Sort-Object -Property CookedValue -Descending | Format-Table -Property InstanceName, CookedValue -AutoSize | Out-String
         Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's CPU utilization has peaked $CPUWarningThreshhold`% (utilizing $CPUUtilization`%) at $(Get-Date)`r`n`r`nTop 10 processes utilizing CPU:`r`n$Top10ProcessesUsingCPU"
         $EndpointCPUStatus = "Warning: High Utilization"
     }
@@ -126,10 +126,10 @@ do{
     if($AvailableRAMInGB -le $RAMWarningThreshhold){
         $OSArch = (Get-WmiObject Win32_OperatingSystem).OSArchitecture
         if($OSArch -eq "32-bit"){
-            $Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet/1MB)}} | Select-Object -First 20
+            [string]$Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet/1MB)}} | Select-Object -First 20 | Out-String
         }
         elseif($OSArch -eq "64-bit"){
-            $Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet64 | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet64/1MB)}} | Select-Object -First 20
+            [string]$Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet64 | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet64/1MB)}} | Select-Object -First 20 | Out-String
         }
         Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's available RAM has gone below $RAMWarningThreshhold`GB (available RAM: $AvailableRAMInGB`GB) at $(Get-Date)`r`n`r`nTop 10 processes utilizing RAM:`r`n$Top20ProcessesUsingRAM"
         $EndpointRAMStatus = "Warning: High Utilization"
