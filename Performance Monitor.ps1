@@ -109,12 +109,10 @@ if(!(Test-Path -Path "C:\MSP\secret.txt")){
 }
 
 do{
-    [int]$CPUUtilization = (Get-Counter -Counter '\processor(_total)\% processor time').CounterSamples.CookedValue
-    [int]$AvailableRAMInGB = [math]::Round((Get-Counter -Counter '\*Memory\Available Bytes').CounterSamples.CookedValue / 1GB,1)
-    [int]$NetInterfaceUploadUtilizationInBytes = (Get-Counter -Counter "\Network interface(*)\Bytes sent/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1
-    [int]$NetInterfaceUploadUtilizationInMbps = $NetInterfaceUploadUtilizationInBytes / 125000
-    [int]$NetInterfaceDownloadUtilizationInBytes = (Get-Counter -Counter "\Network interface(*)\Bytes received/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1
-    [int]$NetInterfaceDownloadUtilizationInMbps = $NetInterfaceDownloadUtilizationInBytes / 125000
+    $CPUUtilization = [math]::Round((Get-Counter -Counter '\processor(_total)\% processor time').CounterSamples.CookedValue,1)
+    $AvailableRAMInGB = [math]::Round(((Get-Counter -Counter '\*Memory\Available Bytes').CounterSamples.CookedValue) / 1000000000,1)
+    $NetInterfaceUploadUtilizationInMbps = [math]::Round(((Get-Counter -Counter "\Network interface(*)\Bytes sent/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1) / 125000,1)
+    $NetInterfaceDownloadUtilizationInMbps = [math]::Round(((Get-Counter -Counter "\Network interface(*)\Bytes received/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1) / 125000,1)
     if($CPUUtilization -ge $CPUWarningThreshhold){
         [string]$Top10ProcessesUsingCPU = (Get-Counter -Counter "\Process(*)\% Processor Time").CounterSamples | Select-Object -First 10 | Sort-Object -Property CookedValue -Descending | Format-Table -Property InstanceName, CookedValue -AutoSize | Out-String
         Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's CPU utilization has peaked $CPUWarningThreshhold`% (utilizing $CPUUtilization`%) at $(Get-Date)`r`n`r`nTop 10 processes utilizing CPU:`r`n$Top10ProcessesUsingCPU"
