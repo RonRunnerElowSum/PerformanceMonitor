@@ -149,7 +149,7 @@ do{
     else{
         $EndpointNetIntDownloadStatus = "Healthy"
     }
-    if(($EndpointCPUStatus = "Healthy") -and ($EndpointRAMStatus = "Healthy") -and ($EndpointNetIntUploadStatus = "Healthy") -and ($EndpointNetIntDownloadStatus = "Healthy")){
+    if(($EndpointCPUStatus -eq "Healthy") -and ($EndpointRAMStatus -eq "Healthy") -and ($EndpointNetIntUploadStatus -eq "Healthy") -and ($EndpointNetIntDownloadStatus -eq "Healthy")){
         $EndpointHasPerformanceIssues = "False"
     }
     else{
