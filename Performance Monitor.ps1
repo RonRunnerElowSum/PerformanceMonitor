@@ -78,7 +78,7 @@ function PostPerformanceData {
     }
 
     $DateTime = Get-Date -Format "MM/dd/yyyy HH:mm"
-    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
+    #Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
 
 $SQLCommand = @"
 if exists(SELECT * from Table_CustomerPerformanceData where EndpointSerial='$EndpointSerial')
