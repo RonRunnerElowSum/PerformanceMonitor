@@ -78,17 +78,17 @@ function PostPerformanceData {
     }
 
     $DateTime = Get-Date -Format "MM/dd/yyyy HH:mm"
-    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAM`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
+    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
 
 $SQLCommand = @"
 if exists(SELECT * from Table_CustomerPerformanceData where EndpointSerial='$EndpointSerial')
 BEGIN            
-UPDATE Table_CustomerPerformanceData SET EndpointComputerName='$EndpointComputerName',EndpointOS='$EndpointOS',EndpointType='$EndpointType',EndpointSiteName='$EndpointSiteName',EndpointCPUStatus='$EndpointCPUStatus',EndpointCPUUtilization='$CPUUtilization',EndpointRAMStatus='$EndpointRAMStatus',EndpointAvailableRAMInGB='$AvailableRAM',EndpointNetInterfaceUploadStatus='$EndpointNetIntUploadStatus',EndpointNetInterfaceUploadUtilizationInMBps='$NetInterfaceUploadUtilizationInMBps',EndpointNetInterfaceDownloadStatus='$EndpointNetIntDownloadStatus',EndpointNetInterfaceDownloadUtilizationInMBps='$NetInterfaceDownloadUtilizationInMBps',LastPostDate='$DateTime' WHERE (EndpointSerial = '$EndpointSerial')
+UPDATE Table_CustomerPerformanceData SET EndpointComputerName='$EndpointComputerName',EndpointOS='$EndpointOS',EndpointType='$EndpointType',EndpointSiteName='$EndpointSiteName',EndpointCPUStatus='$EndpointCPUStatus',EndpointCPUUtilization='$CPUUtilization',EndpointRAMStatus='$EndpointRAMStatus',EndpointAvailableRAMInGB='$AvailableRAMInGB',EndpointNetInterfaceUploadStatus='$EndpointNetIntUploadStatus',EndpointNetInterfaceUploadUtilizationInMBps='$NetInterfaceUploadUtilizationInMBps',EndpointNetInterfaceDownloadStatus='$EndpointNetIntDownloadStatus',EndpointNetInterfaceDownloadUtilizationInMBps='$NetInterfaceDownloadUtilizationInMBps',LastPostDate='$DateTime' WHERE (EndpointSerial = '$EndpointSerial')
 END                  
 else            
 BEGIN
 INSERT INTO [$SQLDatabase].[dbo].[Table_CustomerPerformanceData](EndpointSerial,EndpointComputerName,EndpointOS,EndpointType,EndpointSiteName,EndpointCPUStatus,EndpointCPUUtilization,EndpointRAMStatus,EndpointAvailableRAMInGB,EndpointNetInterfaceUploadStatus,EndpointNetInterfaceUploadUtilizationInMBps,EndpointNetInterfaceDownloadStatus,EndpointNetInterfaceDownloadUtilizationInMBps,LastPostDate)
-VALUES ('$EndpointSerial','$EndpointComputerName','$EndpointOS','$EndpointType','$EndpointSiteName','$EndpointCPUStatus','$CPUUtilization','$EndpointRAMStatus','$AvailableRAM','$EndpointNetIntUploadStatus','$NetInterfaceUploadUtilizationInMBps','$EndpointNetIntDownloadStatus','$NetInterfaceDownloadUtilizationInMBps','$DateTime')
+VALUES ('$EndpointSerial','$EndpointComputerName','$EndpointOS','$EndpointType','$EndpointSiteName','$EndpointCPUStatus','$CPUUtilization','$EndpointRAMStatus','$AvailableRAMInGB','$EndpointNetIntUploadStatus','$NetInterfaceUploadUtilizationInMBps','$EndpointNetIntDownloadStatus','$NetInterfaceDownloadUtilizationInMBps','$DateTime')
 END
 "@      
 
@@ -103,22 +103,14 @@ END
     Invoke-SqlCmd @Params -Query $SQLCommand -EncryptConnection
 }
 
-function Get-CPUUtilization {
-    (Get-Counter -Counter '\processor(_total)\% processor time').CounterSamples.CookedValue
-}
-
-function Get-AvailableRAM {
-    [math]::Round((Get-Counter -Counter '\*Memory\Available Bytes').CounterSamples.CookedValue / 1GB,1)
-}
-
 if(!(Test-Path -Path "C:\MSP\secret.txt")){
     Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Error" -LogMessage "C:\MSP\secret.txt does not exist...exiting..."
     EXIT
 }
 
 do{
-    [int]$CPUUtilization = Get-CPUUtilization
-    [int]$AvailableRAM = Get-AvailableRAM
+    [int]$CPUUtilization = (Get-Counter -Counter '\processor(_total)\% processor time').CounterSamples.CookedValue
+    [int]$AvailableRAMInGB = [math]::Round((Get-Counter -Counter '\*Memory\Available Bytes').CounterSamples.CookedValue / 1GB,1)
     [int]$NetInterfaceUploadUtilizationInBytes = (Get-Counter -Counter "\Network interface(*)\Bytes sent/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1
     [int]$NetInterfaceUploadUtilizationInMbps = $NetInterfaceUploadUtilizationInBytes / 125000
     [int]$NetInterfaceDownloadUtilizationInBytes = (Get-Counter -Counter "\Network interface(*)\Bytes received/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1
@@ -131,7 +123,7 @@ do{
     else{
         $EndpointCPUStatus = "Healthy"
     }
-    if($AvailableRAM -le $RAMWarningThreshhold){
+    if($AvailableRAMInGB -le $RAMWarningThreshhold){
         $OSArch = (Get-WmiObject Win32_OperatingSystem).OSArchitecture
         if($OSArch -eq "32-bit"){
             $Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet/1MB)}} | Select-Object -First 20
@@ -139,7 +131,7 @@ do{
         elseif($OSArch -eq "64-bit"){
             $Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet64 | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet64/1MB)}} | Select-Object -First 20
         }
-        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's available RAM has gone below $RAMWarningThreshhold`GB (available RAM: $AvailableRAM`GB) at $(Get-Date)`r`n`r`nTop 10 processes utilizing RAM:`r`n$Top20ProcessesUsingRAM"
+        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's available RAM has gone below $RAMWarningThreshhold`GB (available RAM: $AvailableRAMInGB`GB) at $(Get-Date)`r`n`r`nTop 10 processes utilizing RAM:`r`n$Top20ProcessesUsingRAM"
         $EndpointRAMStatus = "Warning: High Utilization"
     }
     else{
