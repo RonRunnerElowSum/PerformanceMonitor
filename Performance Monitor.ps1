@@ -1,6 +1,6 @@
-#Warning  utilization percentage is greater than or equal to this amount
+#CPU utilization warning percentage
 $CPUWarningThreshhold = "90"
-#Warning when this amount or less of RAM is remaining
+#RAM utilization warning threshhold in GB
 $RAMWarningThreshhold = "1"
 #Network interface warning threshhold in Mbps
 $NetInterfaceDownloadWarningThreshhold = "30"
@@ -78,7 +78,7 @@ function PostPerformanceData {
     }
 
     $DateTime = Get-Date -Format "MM/dd/yyyy HH:mm"
-    #Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
+    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
 
 $SQLCommand = @"
 if exists(SELECT * from Table_CustomerPerformanceData where EndpointSerial='$EndpointSerial')
@@ -109,20 +109,22 @@ function PunchIt {
         EXIT
     }
 
+    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Starting performance monitor..."
+
     $CPUPerformanceErrorCounter = @()
     $RAMPerformanceErrorCounter = @()
     $NetworkUploadPerformanceErrorCounter = @()
     $NetworkDownloadPerformanceErrorCounter = @()
     
     do{
-    
+    #CPU check
         $CPUUtilization = [math]::Round((Get-Counter -Counter '\processor(_total)\% processor time').CounterSamples.CookedValue,1)
         $AvailableRAMInGB = [math]::Round(((Get-Counter -Counter '\*Memory\Available Bytes').CounterSamples.CookedValue) / 1000000000,1)
         $NetInterfaceUploadUtilizationInMbps = [math]::Round(((Get-Counter -Counter "\Network interface(*)\Bytes sent/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1) / 125000,1)
         $NetInterfaceDownloadUtilizationInMbps = [math]::Round(((Get-Counter -Counter "\Network interface(*)\Bytes received/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1) / 125000,1)
         if($CPUUtilization -ge $CPUWarningThreshhold){
             $CPUPerformanceErrorCounter += 1
-            if($CPUPerformanceErrorCounter -eq 3){
+            if($CPUPerformanceErrorCounter -eq 2){
                 [string]$Top10ProcessesUsingCPU = (Get-Counter -Counter "\Process(*)\% Processor Time").CounterSamples | Select-Object -First 10 | Sort-Object -Property CookedValue -Descending | Format-Table -Property InstanceName, CookedValue -AutoSize | Out-String
                 $NumberOfCPUUtilizationErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
                 $NumberOfCPUUtilizationErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
@@ -139,6 +141,7 @@ function PunchIt {
             $CPUPerformanceErrorCounter = @()
             $EndpointCPUStatus = "Healthy"
         }
+    #RAM check
         if($AvailableRAMInGB -le $RAMWarningThreshhold){
             $RAMPerformanceErrorCounter += 1
             if($RAMPerformanceErrorCounter -eq 3){
@@ -164,6 +167,7 @@ function PunchIt {
             $RAMPerformanceErrorCounter = @()
             $EndpointRAMStatus = "Healthy"
         }
+    #Network interface upload check
         if($NetInterfaceUploadUtilizationInMbps -ge $NetInterfaceUploadWarningThreshhold){
             $NetworkUploadPerformanceErrorCounter += 1
             if($NetworkUploadPerformanceErrorCounter -eq 3){
@@ -182,6 +186,7 @@ function PunchIt {
             $NetworkUploadPerformanceErrorCounter = @()
             $EndpointNetIntUploadStatus = "Healthy"
         }
+    #Network interface download check
         if($NetInterfaceDownloadUtilizationInMbps -ge $NetInterfaceDownloadWarningThreshhold){
             $NetworkDownloadPerformanceErrorCounter += 1
             if($NetworkDownloadPerformanceErrorCounter -eq 3){
@@ -200,6 +205,7 @@ function PunchIt {
             $NetworkDownloadPerformanceErrorCounter = @()
             $EndpointNetIntDownloadStatus = "Healthy"
         }
+
         if(($EndpointCPUStatus -eq "Healthy") -and ($EndpointRAMStatus -eq "Healthy") -and ($EndpointNetIntUploadStatus -eq "Healthy") -and ($EndpointNetIntDownloadStatus -eq "Healthy")){
             $EndpointHasPerformanceIssues = "False"
         }
@@ -208,7 +214,7 @@ function PunchIt {
         }
     
         PostPerformanceData
-        Start-Sleep -Seconds 30
+        Start-Sleep -Seconds 45
     }
     while(
         $True
