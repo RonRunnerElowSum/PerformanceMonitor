@@ -108,12 +108,13 @@ function PunchIt {
         Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Error" -LogMessage "C:\MSP\secret.txt does not exist...exiting..."
         EXIT
     }
+
+    $CPUPerformanceErrorCounter = @()
+    $RAMPerformanceErrorCounter = @()
+    $NetworkUploadPerformanceErrorCounter = @()
+    $NetworkDownloadPerformanceErrorCounter = @()
     
     do{
-        $CPUPerformanceErrorCounter = @()
-        $RAMPerformanceErrorCounter = @()
-        $NetworkUploadPerformanceErrorCounter = @()
-        $NetworkDownloadPerformanceErrorCounter = @()
     
         $CPUUtilization = [math]::Round((Get-Counter -Counter '\processor(_total)\% processor time').CounterSamples.CookedValue,1)
         $AvailableRAMInGB = [math]::Round(((Get-Counter -Counter '\*Memory\Available Bytes').CounterSamples.CookedValue) / 1000000000,1)
