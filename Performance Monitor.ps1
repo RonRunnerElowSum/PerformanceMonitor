@@ -1,120 +1,13 @@
-#CPU utilization warning percentage
-$CPUWarningThreshhold = "90"
-#RAM utilization warning threshhold in GB
-$RAMWarningThreshhold = "1"
-#Network interface warning threshhold in Mbps
-$NetInterfaceDownloadWarningThreshhold = "30"
-$NetInterfaceUploadWarningThreshhold = "15"
-
-function Write-MSPLog {
-    Param
-    (
-         [Parameter(Mandatory=$true, Position=0)]
-         [ValidateSet('MSP Performance Monitor')]
-         [string] $LogSource,
-         [Parameter(Mandatory=$true, Position=1)]
-         [ValidateSet('Information','Warning','Error')]
-         [string] $LogType,
-         [Parameter(Mandatory=$true, Position=2)]
-         [string] $LogMessage
-    )
-
-    New-EventLog -LogName MSP-IT -Source 'MSP' -ErrorAction SilentlyContinue
-    if(!(Get-EventLog -LogName MSP-IT -Source 'MSP Performance Monitor' -ErrorAction SilentlyContinue)){
-        New-EventLog -LogName MSP-IT -Source 'MSP Performance Monitor' -ErrorAction SilentlyContinue
-    }
-    Write-EventLog -Log MSP-IT -Source "MSP Performance Monitor" -EventID 0 -EntryType $LogType -Message "$LogMessage"
-}
-
-function InstallSqlServerPSModule () {
-    Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser -Force -ErrorAction SilentlyContinue
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Install-Module SqlServer -Force -AllowClobber | Out-Null
-    Import-Module SqlServer -Force | Out-Null
-    if(!(Get-Module -Name "SqlServer")){
-        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "The module SqlServer failed to install..."
-        EXIT
-    }
-}
-
-function PostPerformanceData {
-
-    $EndpointSerial = (Get-CimInstance win32_bios).SerialNumber
-    $EndpointComputerName = [System.Net.Dns]::GetHostByName($Env:ComputerName).HostName
-    $EndpointOS = (Get-WmiObject -class Win32_OperatingSystem).Caption
-    if($EndpointOS | Select-String "Server"){
-        $EndpointType = "Server"
-    }
-    else{
-        $EndpointType = "Workstation"
-    }
-    if(($Null -eq $EndpointSerial) -or ($EndpointSerial -eq "To be filled by O.E.M.")){
-        $EndpointSerial = $EndpointComputerName
-    }
-    if(Test-Path "C:\ComSys\EndpointSiteName.txt" -ErrorAction SilentlyContinue){
-        $EndpointSiteName = Get-Content -Path "C:\ComSys\EndpointSiteName.txt"
-    }
-    elseif(Test-Path "C:\Program Files\SAAZOD\ApplicationLog\zSCCLog\zDCMGetSitecode.log" -ErrorAction SilentlyContinue){
-        $EndpointSiteName = (Get-Content -Path "C:\Program Files\SAAZOD\ApplicationLog\zSCCLog\zDCMGetSitecode.log" | Select-String "sitename=" | Select-Object -Last 1) -Replace "^.*?="
-    }
-    elseif(Test-Path "C:\Program Files (x86)\SAAZOD\ApplicationLog\zSCCLog\zDCMGetSitecode.log" -ErrorAction SilentlyContinue){
-        $EndpointSiteName = (Get-Content -Path "C:\Program Files (x86)\SAAZOD\ApplicationLog\zSCCLog\zDCMGetSitecode.log" | Select-String "sitename=" | Select-Object -Last 1) -Replace "^.*?="
-    }
-    if($Null -eq $EndpointSiteName){
-        if(Test-Path "C:\Program Files\SAAZOD\ApplicationLog\WebPost\WebPostDLL\WebPostComp-tfr_wpdcmgetsitecode.Log" -ErrorAction SilentlyContinue){
-            $EndpointSiteName = (((((Get-Content -Path "C:\Program Files\SAAZOD\ApplicationLog\WebPost\WebPostDLL\WebPostComp-tfr_wpdcmgetsitecode.Log" | Select-String "<sitename>" | Select-Object -Last 1) -Replace "^.*?!") -Replace "^.*?!") -Replace "^.*?!") -Replace '\[CDATA\[','') -Split '\]\]'[-1] | Select-Object -First 1
-        }
-        if(Test-Path "C:\Program Files (x86)\SAAZOD\ApplicationLog\WebPost\WebPostDLL\WebPostComp-tfr_wpdcmgetsitecode.Log" -ErrorAction SilentlyContinue){
-            $EndpointSiteName = (((((Get-Content -Path "C:\Program Files (x86)\SAAZOD\ApplicationLog\WebPost\WebPostDLL\WebPostComp-tfr_wpdcmgetsitecode.Log" | Select-String "<sitename>" | Select-Object -Last 1) -Replace "^.*?!") -Replace "^.*?!") -Replace "^.*?!") -Replace '\[CDATA\[','') -Split '\]\]'[-1] | Select-Object -First 1
-        }
-    }
-
-    try{
-        if(!(Test-Path -Path "C:\MSP\secret.txt")){
-            Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Error" -LogMessage "C:\MSP\secret.txt does not exist...exiting..."
-            EXIT
-        }
-        $SensitiveString = Get-Content -Path "C:\MSP\secret.txt" | ConvertTo-SecureString
-        $Marshal = [System.Runtime.InteropServices.Marshal]
-        $Bstr = $Marshal::SecureStringToBSTR($SensitiveString)
-        $DecryptedString = $Marshal::PtrToStringAuto($Bstr)
-        $Marshal::ZeroFreeBSTR($Bstr)
-        $SQLServer = $DecryptedString -split ";" | Select-Object -Index 0
-        $SQLDatabase = $DecryptedString -split ";" | Select-Object -Index 1
-        $SQLUsername = $DecryptedString -split ";" | Select-Object -Index 2
-        $SQLPassword = $DecryptedString -split ";" | Select-Object -Index 3
-    }
-    catch{
-        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Error" -LogMessage "Failed to decrypt SQL connection info...exiting..."
-    }
-
-    $DateTime = Get-Date -Format "MM/dd/yyyy HH:mm"
-    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
-
-$SQLCommand = @"
-if exists(SELECT * from Table_CustomerPerformanceData where EndpointSerial='$EndpointSerial')
-BEGIN            
-UPDATE Table_CustomerPerformanceData SET EndpointComputerName='$EndpointComputerName',EndpointOS='$EndpointOS',EndpointType='$EndpointType',EndpointSiteName='$EndpointSiteName',EndpointCPUStatus='$EndpointCPUStatus',EndpointCPUUtilization='$CPUUtilization',EndpointCPUPerfErrorsCountToday='$NumberOfCPUUtilizationErrorsToday',EndpointCPUPerfErrorsCountLast30Days='$NumberOfCPUUtilizationErrorsInPast30Days',EndpointCPUPerfErrorsCountLast60Days='$NumberOfCPUUtilizationErrorsInPast60Days',EndpointCPUPerfErrorsCountLast90Days='$NumberOfCPUUtilizationErrorsInPast90Days',EndpointRAMStatus='$EndpointRAMStatus',EndpointAvailableRAMInGB='$AvailableRAMInGB',EndpointRAMPerfErrorsCountToday='$NumberOfRAMUtilizationErrorsToday',EndpointRAMPerfErrorsCountLast30Days='$NumberOfRAMUtilizationErrorsInPast30Days',EndpointRAMPerfErrorsCountLast60Days='$NumberOfRAMUtilizationErrorsInPast60Days',EndpointRAMPerfErrorsCountLast90Days='$NumberOfRAMUtilizationErrorsInPast90Days',EndpointNetInterfaceUploadStatus='$EndpointNetIntUploadStatus',EndpointNetInterfaceUploadUtilizationInMbps='$NetInterfaceUploadUtilizationInMBps',EndpointNetUploadPerfErrorsCountToday='$NumberOfNetworkUtilizationUploadErrorsToday',EndpointNetUploadPerfErrorsCountLast30Days='$NumberOfNetworkUtilizationUploadErrorsInPast30Days',EndpointNetUploadPerfErrorsCountLast60Days='$NumberOfNetworkUtilizationUploadErrorsInPast60Days',EndpointNetUploadPerfErrorsCountLast90Days='$NumberOfNetworkUtilizationUploadErrorsInPast90Days',EndpointNetInterfaceDownloadStatus='$EndpointNetIntDownloadStatus',EndpointNetInterfaceDownloadUtilizationInMbps='$NetInterfaceDownloadUtilizationInMBps',EndpointNetDownloadPerfErrorsCountToday='$NumberOfNetworkUtilizationDownloadErrorsToday',EndpointNetDownloadPerfErrorsCountLast30Days='$NumberOfNetworkUtilizationDownloadErrorsPast30Days',EndpointNetDownloadPerfErrorsCountLast60Days='$NumberOfNetworkUtilizationDownloadErrorsPast60Days',EndpointNetDownloadPerfErrorsCountLast90Days='$NumberOfNetworkUtilizationDownloadErrorsPast90Days',EndpointHasPerformanceIssues='$EndpointHasPerformanceIssues',LastPostDate='$DateTime' WHERE (EndpointSerial = '$EndpointSerial')
-END
-else            
-BEGIN
-INSERT INTO [$SQLDatabase].[dbo].[Table_CustomerPerformanceData](EndpointSerial,EndpointComputerName,EndpointOS,EndpointType,EndpointSiteName,EndpointCPUStatus,EndpointCPUUtilization,EndpointCPUPerfErrorsCountToday,EndpointCPUPerfErrorsCountLast30Days,EndpointCPUPerfErrorsCountLast60Days,EndpointCPUPerfErrorsCountLast90Days,EndpointRAMStatus,EndpointAvailableRAMInGB,EndpointRAMPerfErrorsCountToday,EndpointRAMPerfErrorsCountLast30Days,EndpointRAMPerfErrorsCountLast60Days,EndpointRAMPerfErrorsCountLast90Days,EndpointNetInterfaceUploadStatus,EndpointNetInterfaceUploadUtilizationInMbps,EndpointNetUploadPerfErrorsCountToday,EndpointNetUploadPerfErrorsCountLast30Days,EndpointNetUploadPerfErrorsCountLast60Days,EndpointNetUploadPerfErrorsCountLast90Days,EndpointNetInterfaceDownloadStatus,EndpointNetInterfaceDownloadUtilizationInMbps,EndpointNetDownloadPerfErrorsCountToday,EndpointNetDownloadPerfErrorsCountLast30Days,EndpointNetDownloadPerfErrorsCountLast60Days,EndpointNetDownloadPerfErrorsCountLast90Days,EndpointHasPerformanceIssues,LastPostDate)
-VALUES ('$EndpointSerial','$EndpointComputerName','$EndpointOS','$EndpointType','$EndpointSiteName','$EndpointCPUStatus','$CPUUtilization','$NumberOfCPUUtilizationErrorsToday','$NumberOfCPUUtilizationErrorsInPast30Days','$NumberOfCPUUtilizationErrorsInPast60Days','$NumberOfCPUUtilizationErrorsInPast90Days','$EndpointRAMStatus','$AvailableRAMInGB','$NumberOfRAMUtilizationErrorsToday','$NumberOfRAMUtilizationErrorsInPast30Days','$NumberOfRAMUtilizationErrorsInPast60Days','$NumberOfRAMUtilizationErrorsInPast90Days','$EndpointNetIntUploadStatus','$NetInterfaceUploadUtilizationInMBps','$NumberOfNetworkUtilizationUploadErrorsToday','$NumberOfNetworkUtilizationUploadErrorsInPast30Days','$NumberOfNetworkUtilizationUploadErrorsInPast60Days','$NumberOfNetworkUtilizationUploadErrorsInPast90Days','$EndpointNetIntDownloadStatus','$NetInterfaceDownloadUtilizationInMBps','$NumberOfNetworkUtilizationDownloadErrorsToday','$NumberOfNetworkUtilizationDownloadErrorsInPast30Days','$NumberOfNetworkUtilizationDownloadErrorsInPast60Days','$NumberOfNetworkUtilizationDownloadErrorsInPast90Days','$EndpointHasPerformanceIssues','$DateTime')
-END
-"@      
-
-    $Params = @{
-        'ServerInstance'=$SQLServer;
-        'Database'=$SQLDatabase;
-        'Username'=$SQLUsername;
-        'Password'=$SQLPassword
-    }
-    
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-SqlCmd @Params -Query $SQLCommand -EncryptConnection
-}
-
 function PunchIt {
+
+    #CPU utilization warning percentage
+    $CPUWarningThreshhold = "90"
+    #RAM utilization warning threshhold in GB
+    $RAMWarningThreshhold = "1"
+    #Network interface warning threshhold in Mbps
+    $NetInterfaceDownloadWarningThreshhold = "30"
+    $NetInterfaceUploadWarningThreshhold = "15"
+<#---------------------------------------------------------------------------#>
     if(!(Get-Module -Name "SqlServer")){
         Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "SqlServer module is not installed...installing now..."
         InstallSqlServerPSModule
@@ -234,4 +127,112 @@ function PunchIt {
     while(
         $True
     )
+}
+
+function Write-MSPLog {
+    Param
+    (
+         [Parameter(Mandatory=$true, Position=0)]
+         [ValidateSet('MSP Performance Monitor')]
+         [string] $LogSource,
+         [Parameter(Mandatory=$true, Position=1)]
+         [ValidateSet('Information','Warning','Error')]
+         [string] $LogType,
+         [Parameter(Mandatory=$true, Position=2)]
+         [string] $LogMessage
+    )
+
+    New-EventLog -LogName MSP-IT -Source 'MSP' -ErrorAction SilentlyContinue
+    if(!(Get-EventLog -LogName MSP-IT -Source 'MSP Performance Monitor' -ErrorAction SilentlyContinue)){
+        New-EventLog -LogName MSP-IT -Source 'MSP Performance Monitor' -ErrorAction SilentlyContinue
+    }
+    Write-EventLog -Log MSP-IT -Source "MSP Performance Monitor" -EventID 0 -EntryType $LogType -Message "$LogMessage"
+}
+
+function InstallSqlServerPSModule () {
+    Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser -Force -ErrorAction SilentlyContinue
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Install-Module SqlServer -Force -AllowClobber | Out-Null
+    Import-Module SqlServer -Force | Out-Null
+    if(!(Get-Module -Name "SqlServer")){
+        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "The module SqlServer failed to install..."
+        EXIT
+    }
+}
+
+function PostPerformanceData {
+
+    $EndpointSerial = (Get-CimInstance win32_bios).SerialNumber
+    $EndpointComputerName = [System.Net.Dns]::GetHostByName($Env:ComputerName).HostName
+    $EndpointOS = (Get-WmiObject -class Win32_OperatingSystem).Caption
+    if($EndpointOS | Select-String "Server"){
+        $EndpointType = "Server"
+    }
+    else{
+        $EndpointType = "Workstation"
+    }
+    if(($Null -eq $EndpointSerial) -or ($EndpointSerial -eq "To be filled by O.E.M.")){
+        $EndpointSerial = $EndpointComputerName
+    }
+    if(Test-Path "C:\ComSys\EndpointSiteName.txt" -ErrorAction SilentlyContinue){
+        $EndpointSiteName = Get-Content -Path "C:\ComSys\EndpointSiteName.txt"
+    }
+    elseif(Test-Path "C:\Program Files\SAAZOD\ApplicationLog\zSCCLog\zDCMGetSitecode.log" -ErrorAction SilentlyContinue){
+        $EndpointSiteName = (Get-Content -Path "C:\Program Files\SAAZOD\ApplicationLog\zSCCLog\zDCMGetSitecode.log" | Select-String "sitename=" | Select-Object -Last 1) -Replace "^.*?="
+    }
+    elseif(Test-Path "C:\Program Files (x86)\SAAZOD\ApplicationLog\zSCCLog\zDCMGetSitecode.log" -ErrorAction SilentlyContinue){
+        $EndpointSiteName = (Get-Content -Path "C:\Program Files (x86)\SAAZOD\ApplicationLog\zSCCLog\zDCMGetSitecode.log" | Select-String "sitename=" | Select-Object -Last 1) -Replace "^.*?="
+    }
+    if($Null -eq $EndpointSiteName){
+        if(Test-Path "C:\Program Files\SAAZOD\ApplicationLog\WebPost\WebPostDLL\WebPostComp-tfr_wpdcmgetsitecode.Log" -ErrorAction SilentlyContinue){
+            $EndpointSiteName = (((((Get-Content -Path "C:\Program Files\SAAZOD\ApplicationLog\WebPost\WebPostDLL\WebPostComp-tfr_wpdcmgetsitecode.Log" | Select-String "<sitename>" | Select-Object -Last 1) -Replace "^.*?!") -Replace "^.*?!") -Replace "^.*?!") -Replace '\[CDATA\[','') -Split '\]\]'[-1] | Select-Object -First 1
+        }
+        if(Test-Path "C:\Program Files (x86)\SAAZOD\ApplicationLog\WebPost\WebPostDLL\WebPostComp-tfr_wpdcmgetsitecode.Log" -ErrorAction SilentlyContinue){
+            $EndpointSiteName = (((((Get-Content -Path "C:\Program Files (x86)\SAAZOD\ApplicationLog\WebPost\WebPostDLL\WebPostComp-tfr_wpdcmgetsitecode.Log" | Select-String "<sitename>" | Select-Object -Last 1) -Replace "^.*?!") -Replace "^.*?!") -Replace "^.*?!") -Replace '\[CDATA\[','') -Split '\]\]'[-1] | Select-Object -First 1
+        }
+    }
+
+    try{
+        if(!(Test-Path -Path "C:\MSP\secret.txt")){
+            Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Error" -LogMessage "C:\MSP\secret.txt does not exist...exiting..."
+            EXIT
+        }
+        $SensitiveString = Get-Content -Path "C:\MSP\secret.txt" | ConvertTo-SecureString
+        $Marshal = [System.Runtime.InteropServices.Marshal]
+        $Bstr = $Marshal::SecureStringToBSTR($SensitiveString)
+        $DecryptedString = $Marshal::PtrToStringAuto($Bstr)
+        $Marshal::ZeroFreeBSTR($Bstr)
+        $SQLServer = $DecryptedString -split ";" | Select-Object -Index 0
+        $SQLDatabase = $DecryptedString -split ";" | Select-Object -Index 1
+        $SQLUsername = $DecryptedString -split ";" | Select-Object -Index 2
+        $SQLPassword = $DecryptedString -split ";" | Select-Object -Index 3
+    }
+    catch{
+        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Error" -LogMessage "Failed to decrypt SQL connection info...exiting..."
+    }
+
+    $DateTime = Get-Date -Format "MM/dd/yyyy HH:mm"
+    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
+
+$SQLCommand = @"
+if exists(SELECT * from Table_CustomerPerformanceData where EndpointSerial='$EndpointSerial')
+BEGIN            
+UPDATE Table_CustomerPerformanceData SET EndpointComputerName='$EndpointComputerName',EndpointOS='$EndpointOS',EndpointType='$EndpointType',EndpointSiteName='$EndpointSiteName',EndpointCPUStatus='$EndpointCPUStatus',EndpointCPUUtilization='$CPUUtilization',EndpointCPUPerfErrorsCountToday='$NumberOfCPUUtilizationErrorsToday',EndpointCPUPerfErrorsCountLast30Days='$NumberOfCPUUtilizationErrorsInPast30Days',EndpointCPUPerfErrorsCountLast60Days='$NumberOfCPUUtilizationErrorsInPast60Days',EndpointCPUPerfErrorsCountLast90Days='$NumberOfCPUUtilizationErrorsInPast90Days',EndpointRAMStatus='$EndpointRAMStatus',EndpointAvailableRAMInGB='$AvailableRAMInGB',EndpointRAMPerfErrorsCountToday='$NumberOfRAMUtilizationErrorsToday',EndpointRAMPerfErrorsCountLast30Days='$NumberOfRAMUtilizationErrorsInPast30Days',EndpointRAMPerfErrorsCountLast60Days='$NumberOfRAMUtilizationErrorsInPast60Days',EndpointRAMPerfErrorsCountLast90Days='$NumberOfRAMUtilizationErrorsInPast90Days',EndpointNetInterfaceUploadStatus='$EndpointNetIntUploadStatus',EndpointNetInterfaceUploadUtilizationInMbps='$NetInterfaceUploadUtilizationInMBps',EndpointNetUploadPerfErrorsCountToday='$NumberOfNetworkUtilizationUploadErrorsToday',EndpointNetUploadPerfErrorsCountLast30Days='$NumberOfNetworkUtilizationUploadErrorsInPast30Days',EndpointNetUploadPerfErrorsCountLast60Days='$NumberOfNetworkUtilizationUploadErrorsInPast60Days',EndpointNetUploadPerfErrorsCountLast90Days='$NumberOfNetworkUtilizationUploadErrorsInPast90Days',EndpointNetInterfaceDownloadStatus='$EndpointNetIntDownloadStatus',EndpointNetInterfaceDownloadUtilizationInMbps='$NetInterfaceDownloadUtilizationInMBps',EndpointNetDownloadPerfErrorsCountToday='$NumberOfNetworkUtilizationDownloadErrorsToday',EndpointNetDownloadPerfErrorsCountLast30Days='$NumberOfNetworkUtilizationDownloadErrorsPast30Days',EndpointNetDownloadPerfErrorsCountLast60Days='$NumberOfNetworkUtilizationDownloadErrorsPast60Days',EndpointNetDownloadPerfErrorsCountLast90Days='$NumberOfNetworkUtilizationDownloadErrorsPast90Days',EndpointHasPerformanceIssues='$EndpointHasPerformanceIssues',LastPostDate='$DateTime' WHERE (EndpointSerial = '$EndpointSerial')
+END
+else            
+BEGIN
+INSERT INTO [$SQLDatabase].[dbo].[Table_CustomerPerformanceData](EndpointSerial,EndpointComputerName,EndpointOS,EndpointType,EndpointSiteName,EndpointCPUStatus,EndpointCPUUtilization,EndpointCPUPerfErrorsCountToday,EndpointCPUPerfErrorsCountLast30Days,EndpointCPUPerfErrorsCountLast60Days,EndpointCPUPerfErrorsCountLast90Days,EndpointRAMStatus,EndpointAvailableRAMInGB,EndpointRAMPerfErrorsCountToday,EndpointRAMPerfErrorsCountLast30Days,EndpointRAMPerfErrorsCountLast60Days,EndpointRAMPerfErrorsCountLast90Days,EndpointNetInterfaceUploadStatus,EndpointNetInterfaceUploadUtilizationInMbps,EndpointNetUploadPerfErrorsCountToday,EndpointNetUploadPerfErrorsCountLast30Days,EndpointNetUploadPerfErrorsCountLast60Days,EndpointNetUploadPerfErrorsCountLast90Days,EndpointNetInterfaceDownloadStatus,EndpointNetInterfaceDownloadUtilizationInMbps,EndpointNetDownloadPerfErrorsCountToday,EndpointNetDownloadPerfErrorsCountLast30Days,EndpointNetDownloadPerfErrorsCountLast60Days,EndpointNetDownloadPerfErrorsCountLast90Days,EndpointHasPerformanceIssues,LastPostDate)
+VALUES ('$EndpointSerial','$EndpointComputerName','$EndpointOS','$EndpointType','$EndpointSiteName','$EndpointCPUStatus','$CPUUtilization','$NumberOfCPUUtilizationErrorsToday','$NumberOfCPUUtilizationErrorsInPast30Days','$NumberOfCPUUtilizationErrorsInPast60Days','$NumberOfCPUUtilizationErrorsInPast90Days','$EndpointRAMStatus','$AvailableRAMInGB','$NumberOfRAMUtilizationErrorsToday','$NumberOfRAMUtilizationErrorsInPast30Days','$NumberOfRAMUtilizationErrorsInPast60Days','$NumberOfRAMUtilizationErrorsInPast90Days','$EndpointNetIntUploadStatus','$NetInterfaceUploadUtilizationInMBps','$NumberOfNetworkUtilizationUploadErrorsToday','$NumberOfNetworkUtilizationUploadErrorsInPast30Days','$NumberOfNetworkUtilizationUploadErrorsInPast60Days','$NumberOfNetworkUtilizationUploadErrorsInPast90Days','$EndpointNetIntDownloadStatus','$NetInterfaceDownloadUtilizationInMBps','$NumberOfNetworkUtilizationDownloadErrorsToday','$NumberOfNetworkUtilizationDownloadErrorsInPast30Days','$NumberOfNetworkUtilizationDownloadErrorsInPast60Days','$NumberOfNetworkUtilizationDownloadErrorsInPast90Days','$EndpointHasPerformanceIssues','$DateTime')
+END
+"@      
+
+    $Params = @{
+        'ServerInstance'=$SQLServer;
+        'Database'=$SQLDatabase;
+        'Username'=$SQLUsername;
+        'Password'=$SQLPassword
+    }
+    
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-SqlCmd @Params -Query $SQLCommand -EncryptConnection
 }
