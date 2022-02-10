@@ -36,20 +36,19 @@ function PunchIt {
             $CPUPerformanceErrorCounter += 1
             if($CPUPerformanceErrorCounter.Count -ge "2"){
                 [string]$Top10ProcessesUsingCPU = (Get-Counter -Counter "\Process(*)\% Processor Time").CounterSamples | Select-Object -First 10 | Sort-Object -Property CookedValue -Descending | Format-Table -Property InstanceName, CookedValue -AutoSize | Out-String
-                $NumberOfCPUUtilizationErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
-                $NumberOfCPUUtilizationErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
-                $NumberOfCPUUtilizationErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
-                $NumberOfCPUUtilizationErrorsInPast90Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-90)} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
+                Get-HistoricalCPUPerfData
                 Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's CPU utilization has peaked $CPUWarningThreshhold`% for roughly 60 seconds (utilizing $CPUUtilization`%) at $(Get-Date)`r`n`r`nTop 10 processes utilizing CPU:`r`n$Top10ProcessesUsingCPU`r`n`r`nNumber of CPU performance errors today: $NumberOfCPUUtilizationErrorsToday`r`nNumber of CPU performance errors last 30 days: $NumberOfCPUUtilizationErrorsInPast30Days`r`nNumber of CPU performance errors last 60 days: $NumberOfCPUUtilizationErrorsInPast60Days`r`nNumber of CPU performance errors last 90 days: $NumberOfCPUUtilizationErrorsInPast90Days"
                 $EndpointCPUStatus = "Warning: High Utilization"
             }
             else{
                 $EndpointCPUStatus = "Healthy"
+                Get-HistoricalCPUPerfData
             }
         }
         else{
             $CPUPerformanceErrorCounter = @()
             $EndpointCPUStatus = "Healthy"
+            Get-HistoricalCPUPerfData
         }
     #RAM check
         if($AvailableRAMInGB -le $RAMWarningThreshhold){
@@ -62,58 +61,55 @@ function PunchIt {
                 elseif($OSArch -eq "64-bit"){
                     [string]$Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet64 | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet64/1MB)}} | Select-Object -First 20 | Out-String
                 }
-                $NumberOfRAMUtilizationErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*available RAM*"}).Count
-                $NumberOfRAMUtilizationErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*available RAM*"}).Count
-                $NumberOfRAMUtilizationErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*available RAM*"}).Count
-                $NumberOfRAMUtilizationErrorsInPast90Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-90)} | Where-Object {$_.Message -Like "*available RAM*"}).Count
+                Get-HistoricalRAMPerfData
                 Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's available RAM has gone below $RAMWarningThreshhold`GB and has remained below $RAMWarningThreshhold`GB for roughly 120 seconds (available RAM: $AvailableRAMInGB`GB) at $(Get-Date)`r`n`r`nTop 10 processes utilizing RAM:`r`n$Top20ProcessesUsingRAM`r`n`r`nNumber of RAM performance errors today: $NumberOfRAMUtilizationErrorsToday`r`nNumber of RAM performance errors last 30 days: $NumberOfRAMUtilizationErrorsInPast30Days`r`nNumber of RAM performance errors last 60 days: $NumberOfRAMUtilizationErrorsInPast60Days`r`nNumber of RAM performance errors last 90 days: $NumberOfRAMUtilizationErrorsInPast90Days"
                 $EndpointRAMStatus = "Warning: High Utilization"
             }
             else{
                 $EndpointRAMStatus = "Healthy"
+                Get-HistoricalRAMPerfData
             }
         }
         else{
             $RAMPerformanceErrorCounter = @()
             $EndpointRAMStatus = "Healthy"
+            Get-HistoricalRAMPerfData
         }
     #Network interface upload check
         if($NetInterfaceUploadUtilizationInMbps -ge $NetInterfaceUploadWarningThreshhold){
             $NetworkUploadPerformanceErrorCounter += 1
             if($NetworkUploadPerformanceErrorCounter.Count -ge "3"){
-                $NumberOfNetworkUtilizationUploadErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
-                $NumberOfNetworkUtilizationUploadErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
-                $NumberOfNetworkUtilizationUploadErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
-                $NumberOfNetworkUtilizationUploadErrorsInPast90Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-90)} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
+                Get-HistoricalNetworkUploadPerfData
                 Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's network interface upload utilization has peaked $NetInterfaceUploadWarningThreshhold`Mbps for roughly 120 seconds (utilizing $NetInterfaceUploadUtilizationInMbps`Mbps) at $(Get-Date)`r`n`r`nNumber of network upload performance errors today: $NumberOfNetworkUtilizationUploadErrorsToday`r`nNumber of network upload performance errors last 30 days: $NumberOfNetworkUtilizationUploadErrorsInPast30Days`r`nNumber of network upload performance errors last 60 days: $NumberOfNetworkUtilizationUploadErrorsInPast60Days`r`nNumber of network upload performance errors last 90 days: $NumberOfNetworkUtilizationUploadErrorsInPast90Days"
                 $EndpointNetIntUploadStatus = "Warning: High Upload Utilization"
             }
             else{
                 $EndpointNetIntUploadStatus = "Healthy"
+                Get-HistoricalNetworkUploadPerfData
             }
         }
         else{
             $NetworkUploadPerformanceErrorCounter = @()
             $EndpointNetIntUploadStatus = "Healthy"
+            Get-HistoricalNetworkUploadPerfData
         }
     #Network interface download check
         if($NetInterfaceDownloadUtilizationInMbps -ge $NetInterfaceDownloadWarningThreshhold){
             $NetworkDownloadPerformanceErrorCounter += 1
             if($NetworkDownloadPerformanceErrorCounter.Count -ge "3"){
-                $NumberOfNetworkUtilizationDownloadErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*network interface download*"}).Count
-                $NumberOfNetworkUtilizationDownloadErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*network interface download*"}).Count
-                $NumberOfNetworkUtilizationDownloadErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*network interface download*"}).Count
-                $NumberOfNetworkUtilizationDownloadErrorsInPast90Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-90)} | Where-Object {$_.Message -Like "*network interface download*"}).Count
+                Get-HistoricalNetworkDownloadPerfData
                 Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "$Env:ComputerName's network interface download utilization has peaked $NetInterfaceDownloadWarningThreshhold`Mbps for roughly 120 seconds (utilizing $NetInterfaceDownloadUtilizationInMbps`Mbps) at $(Get-Date)`r`n`r`nNumber of network download performance errors today: $NumberOfNetworkUtilizationDownloadErrorsToday`r`nNumber of network download performance errors last 30 days: $NumberOfNetworkUtilizationDownloadErrorsInPast30Days`r`nNumber of network download performance errors last 60 days: $NumberOfNetworkUtilizationDownloadErrorsInPast60Days`r`nNumber of network download performance errors last 90 days: $NumberOfNetworkUtilizationDownloadErrorsInPast90Days"
                 $EndpointNetIntDownloadStatus = "Warning: High Download Utilization"
             }
             else{
                 $EndpointNetIntDownloadStatus = "Healthy"
+                Get-HistoricalNetworkDownloadPerfData
             }
         }
         else{
             $NetworkDownloadPerformanceErrorCounter = @()
             $EndpointNetIntDownloadStatus = "Healthy"
+            Get-HistoricalNetworkDownloadPerfData
         }
 
         if(($EndpointCPUStatus -eq "Healthy") -and ($EndpointRAMStatus -eq "Healthy") -and ($EndpointNetIntUploadStatus -eq "Healthy") -and ($EndpointNetIntDownloadStatus -eq "Healthy")){
@@ -129,6 +125,34 @@ function PunchIt {
     while(
         $True
     )
+}
+
+function Get-HistoricalCPUPerfData {
+    $NumberOfCPUUtilizationErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
+    $NumberOfCPUUtilizationErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
+    $NumberOfCPUUtilizationErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
+    $NumberOfCPUUtilizationErrorsInPast90Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-90)} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
+}
+
+function Get-HistoricalRAMPerfData {
+    $NumberOfRAMUtilizationErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*available RAM*"}).Count
+    $NumberOfRAMUtilizationErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*available RAM*"}).Count
+    $NumberOfRAMUtilizationErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*available RAM*"}).Count
+    $NumberOfRAMUtilizationErrorsInPast90Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-90)} | Where-Object {$_.Message -Like "*available RAM*"}).Count
+}
+
+function Get-HistoricalNetworkUploadPerfData {
+    $NumberOfNetworkUtilizationUploadErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
+    $NumberOfNetworkUtilizationUploadErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
+    $NumberOfNetworkUtilizationUploadErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
+    $NumberOfNetworkUtilizationUploadErrorsInPast90Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-90)} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
+}
+
+function Get-HistoricalNetworkDownloadPerfData {
+    $NumberOfNetworkUtilizationDownloadErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*network interface download*"}).Count
+    $NumberOfNetworkUtilizationDownloadErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*network interface download*"}).Count
+    $NumberOfNetworkUtilizationDownloadErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*network interface download*"}).Count
+    $NumberOfNetworkUtilizationDownloadErrorsInPast90Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-90)} | Where-Object {$_.Message -Like "*network interface download*"}).Count
 }
 
 function Write-MSPLog {
