@@ -26,6 +26,17 @@ function Write-MSPLog {
     Write-EventLog -Log MSP-IT -Source "MSP Performance Monitor" -EventID 0 -EntryType $LogType -Message "$LogMessage"
 }
 
+function InstallSqlServerPSModule () {
+    Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser -Force -ErrorAction SilentlyContinue
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Install-Module SqlServer -Force -AllowClobber | Out-Null
+    Import-Module SqlServer -Force | Out-Null
+    if(!(Get-Module -Name "SqlServer")){
+        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Warning" -LogMessage "The module SqlServer failed to install..."
+        EXIT
+    }
+}
+
 function PostPerformanceData {
 
     $EndpointSerial = (Get-CimInstance win32_bios).SerialNumber
@@ -104,6 +115,10 @@ END
 }
 
 function PunchIt {
+    if(!(Get-Module -Name "SqlServer")){
+        Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "SqlServer module is not installed...installing now..."
+        InstallSqlServerPSModule
+    }
     if(!(Test-Path -Path "C:\MSP\secret.txt")){
         Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Error" -LogMessage "C:\MSP\secret.txt does not exist...exiting..."
         EXIT
