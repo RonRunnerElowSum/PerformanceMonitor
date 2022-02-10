@@ -7,7 +7,9 @@ function PunchIt {
     #Network interface warning threshhold in Mbps
     $NetInterfaceDownloadWarningThreshhold = "30"
     $NetInterfaceUploadWarningThreshhold = "15"
+
 <#---------------------------------------------------------------------------#>
+
     if(!(Get-Module -Name "SqlServer")){
         Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "SqlServer module is not installed...installing now..."
         InstallSqlServerPSModule
@@ -32,7 +34,7 @@ function PunchIt {
         $NetInterfaceDownloadUtilizationInMbps = [math]::Round(((Get-Counter -Counter "\Network interface(*)\Bytes received/sec").CounterSamples.CookedValue | Sort-Object -Descending | Select-Object -First 1) / 125000,1)
         if($CPUUtilization -ge $CPUWarningThreshhold){
             $CPUPerformanceErrorCounter += 1
-            if($CPUPerformanceErrorCounter -eq 2){
+            if($CPUPerformanceErrorCounter.Count -ge "2"){
                 [string]$Top10ProcessesUsingCPU = (Get-Counter -Counter "\Process(*)\% Processor Time").CounterSamples | Select-Object -First 10 | Sort-Object -Property CookedValue -Descending | Format-Table -Property InstanceName, CookedValue -AutoSize | Out-String
                 $NumberOfCPUUtilizationErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
                 $NumberOfCPUUtilizationErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*CPU utilization*"}).Count
@@ -52,7 +54,7 @@ function PunchIt {
     #RAM check
         if($AvailableRAMInGB -le $RAMWarningThreshhold){
             $RAMPerformanceErrorCounter += 1
-            if($RAMPerformanceErrorCounter -eq 3){
+            if($RAMPerformanceErrorCounter.Count -ge "3"){
                 $OSArch = (Get-WmiObject Win32_OperatingSystem).OSArchitecture
                 if($OSArch -eq "32-bit"){
                     [string]$Top20ProcessesUsingRAM = Get-Process | Sort-Object -Descending WorkingSet | Select-Object Name,@{Name='RAM Used (MB)';Expression={($_.WorkingSet/1MB)}} | Select-Object -First 20 | Out-String
@@ -78,7 +80,7 @@ function PunchIt {
     #Network interface upload check
         if($NetInterfaceUploadUtilizationInMbps -ge $NetInterfaceUploadWarningThreshhold){
             $NetworkUploadPerformanceErrorCounter += 1
-            if($NetworkUploadPerformanceErrorCounter -eq 3){
+            if($NetworkUploadPerformanceErrorCounter.Count -ge "3"){
                 $NumberOfNetworkUtilizationUploadErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
                 $NumberOfNetworkUtilizationUploadErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
                 $NumberOfNetworkUtilizationUploadErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*network interface upload*"}).Count
@@ -97,7 +99,7 @@ function PunchIt {
     #Network interface download check
         if($NetInterfaceDownloadUtilizationInMbps -ge $NetInterfaceDownloadWarningThreshhold){
             $NetworkDownloadPerformanceErrorCounter += 1
-            if($NetworkDownloadPerformanceErrorCounter -eq 3){
+            if($NetworkDownloadPerformanceErrorCounter.Count -ge "3"){
                 $NumberOfNetworkUtilizationDownloadErrorsToday = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"} | Where-Object {$_.Message -Like "*network interface download*"}).Count
                 $NumberOfNetworkUtilizationDownloadErrorsInPast30Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-30)} | Where-Object {$_.Message -Like "*network interface download*"}).Count
                 $NumberOfNetworkUtilizationDownloadErrorsInPast60Days = (Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {[datetime]$_.TimeWritten -ge [datetime]$(Get-Date).AddDays(-60)} | Where-Object {$_.Message -Like "*network interface download*"}).Count
@@ -212,7 +214,7 @@ function PostPerformanceData {
     }
 
     $DateTime = Get-Date -Format "MM/dd/yyyy HH:mm"
-    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMBps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMBps`r`nDate/Time: $DateTime'"
+    Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMbps`Mbps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMbps`Mbps`r`nDate/Time: $DateTime'"
 
 $SQLCommand = @"
 if exists(SELECT * from Table_CustomerPerformanceData where EndpointSerial='$EndpointSerial')
