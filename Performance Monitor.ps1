@@ -104,16 +104,16 @@ function PunchIt {
             $EndpointNetIntDownloadStatus = "Healthy"
         }
         if(($EndpointCPUStatus -eq "Healthy") -and ($EndpointRAMStatus -eq "Healthy") -and ($EndpointNetIntUploadStatus -eq "Healthy") -and ($EndpointNetIntDownloadStatus -eq "Healthy")){
-            [int]$Script:EndpointHasPerformanceIssues = "False"
+            $Script:EndpointHasPerformanceIssues = "False"
         }
         else{
-            [int]$Script:EndpointHasPerformanceIssues = "True"
+            $Script:EndpointHasPerformanceIssues = "True"
         }
         if(Get-EventLog -LogName MSP-IT -EntryType Warning -Source "MSP Performance Monitor" | Where-Object {$_.TimeWritten | Select-String "$(Get-Date -Format "MM/dd/yyyy")"}){
-            [int]$Script:EndpointHasHadPerformanceIssuesToday = "True"
+            $Script:EndpointHasHadPerformanceIssuesToday = "True"
         }
         else{
-            [int]$Script:EndpointHasHadPerformanceIssuesToday = "False"
+            $Script:EndpointHasHadPerformanceIssuesToday = "False"
         }
 
         PostPerformanceData
