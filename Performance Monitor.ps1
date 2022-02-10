@@ -42,13 +42,11 @@ function PunchIt {
             }
             else{
                 $EndpointCPUStatus = "Healthy"
-                Get-HistoricalCPUPerfData
             }
         }
         else{
             $CPUPerformanceErrorCounter = @()
             $EndpointCPUStatus = "Healthy"
-            Get-HistoricalCPUPerfData
         }
     #RAM check
         if($AvailableRAMInGB -le $RAMWarningThreshhold){
@@ -67,13 +65,11 @@ function PunchIt {
             }
             else{
                 $EndpointRAMStatus = "Healthy"
-                Get-HistoricalRAMPerfData
             }
         }
         else{
             $RAMPerformanceErrorCounter = @()
             $EndpointRAMStatus = "Healthy"
-            Get-HistoricalRAMPerfData
         }
     #Network interface upload check
         if($NetInterfaceUploadUtilizationInMbps -ge $NetInterfaceUploadWarningThreshhold){
@@ -85,13 +81,11 @@ function PunchIt {
             }
             else{
                 $EndpointNetIntUploadStatus = "Healthy"
-                Get-HistoricalNetworkUploadPerfData
             }
         }
         else{
             $NetworkUploadPerformanceErrorCounter = @()
             $EndpointNetIntUploadStatus = "Healthy"
-            Get-HistoricalNetworkUploadPerfData
         }
     #Network interface download check
         if($NetInterfaceDownloadUtilizationInMbps -ge $NetInterfaceDownloadWarningThreshhold){
@@ -103,13 +97,11 @@ function PunchIt {
             }
             else{
                 $EndpointNetIntDownloadStatus = "Healthy"
-                Get-HistoricalNetworkDownloadPerfData
             }
         }
         else{
             $NetworkDownloadPerformanceErrorCounter = @()
             $EndpointNetIntDownloadStatus = "Healthy"
-            Get-HistoricalNetworkDownloadPerfData
         }
 
         if(($EndpointCPUStatus -eq "Healthy") -and ($EndpointRAMStatus -eq "Healthy") -and ($EndpointNetIntUploadStatus -eq "Healthy") -and ($EndpointNetIntDownloadStatus -eq "Healthy")){
@@ -238,6 +230,10 @@ function PostPerformanceData {
     }
 
     $DateTime = Get-Date -Format "MM/dd/yyyy HH:mm"
+    Get-HistoricalCPUPerfData
+    Get-HistoricalRAMPerfData
+    Get-HistoricalNetworkUploadPerfData
+    Get-HistoricalNetworkDownloadPerfData
     #Write-MSPLog -LogSource "MSP Performance Monitor" -LogType "Information" -LogMessage "Posting the following information:`r`n`r`nSerial: $EndpointSerial`r`nComputer Name: $EndpointComputerName`r`nOS: $EndpointOS`r`nType: $EndpointType`r`nSite: $EndpointSiteName`r`nCPU Status: $EndpointCPUStatus`r`nCPU Utilization: $CPUUtilization`%`r`nRAM Status: $EndpointRAMStatus`r`nAvailable RAM (GB): $AvailableRAMInGB`GB`r`nUpload status: $EndpointNetIntUploadStatus`r`nUpload Utilization: $NetInterfaceUploadUtilizationInMbps`Mbps`r`nDownload status: $EndpointNetIntDownloadStatus`r`nDownload utilization: $NetInterfaceDownloadUtilizationInMbps`Mbps`r`nDate/Time: $DateTime'"
 
 $SQLCommand = @"
@@ -248,7 +244,7 @@ END
 else            
 BEGIN
 INSERT INTO [$SQLDatabase].[dbo].[Table_CustomerPerformanceData](EndpointSerial,EndpointComputerName,EndpointOS,EndpointType,EndpointSiteName,EndpointCPUStatus,EndpointCPUUtilization,EndpointCPUPerfErrorsCountToday,EndpointCPUPerfErrorsCountLast30Days,EndpointCPUPerfErrorsCountLast60Days,EndpointCPUPerfErrorsCountLast90Days,EndpointRAMStatus,EndpointAvailableRAMInGB,EndpointRAMPerfErrorsCountToday,EndpointRAMPerfErrorsCountLast30Days,EndpointRAMPerfErrorsCountLast60Days,EndpointRAMPerfErrorsCountLast90Days,EndpointNetInterfaceUploadStatus,EndpointNetInterfaceUploadUtilizationInMbps,EndpointNetUploadPerfErrorsCountToday,EndpointNetUploadPerfErrorsCountLast30Days,EndpointNetUploadPerfErrorsCountLast60Days,EndpointNetUploadPerfErrorsCountLast90Days,EndpointNetInterfaceDownloadStatus,EndpointNetInterfaceDownloadUtilizationInMbps,EndpointNetDownloadPerfErrorsCountToday,EndpointNetDownloadPerfErrorsCountLast30Days,EndpointNetDownloadPerfErrorsCountLast60Days,EndpointNetDownloadPerfErrorsCountLast90Days,EndpointHasPerformanceIssues,LastPostDate)
-VALUES ('$EndpointSerial','$EndpointComputerName','$EndpointOS','$EndpointType','$EndpointSiteName','$EndpointCPUStatus','$CPUUtilization','$NumberOfCPUUtilizationErrorsToday','$NumberOfCPUUtilizationErrorsInPast30Days','$NumberOfCPUUtilizationErrorsInPast60Days','$NumberOfCPUUtilizationErrorsInPast90Days','$EndpointRAMStatus','$AvailableRAMInGB','$NumberOfRAMUtilizationErrorsToday','$NumberOfRAMUtilizationErrorsInPast30Days','$NumberOfRAMUtilizationErrorsInPast60Days','$NumberOfRAMUtilizationErrorsInPast90Days','$EndpointNetIntUploadStatus','$NetInterfaceUploadUtilizationInMBps','$NumberOfNetworkUtilizationUploadErrorsToday','$NumberOfNetworkUtilizationUploadErrorsInPast30Days','$NumberOfNetworkUtilizationUploadErrorsInPast60Days','$NumberOfNetworkUtilizationUploadErrorsInPast90Days','$EndpointNetIntDownloadStatus','$NetInterfaceDownloadUtilizationInMBps','$NumberOfNetworkUtilizationDownloadErrorsToday','$NumberOfNetworkUtilizationDownloadErrorsInPast30Days','$NumberOfNetworkUtilizationDownloadErrorsInPast60Days','$NumberOfNetworkUtilizationDownloadErrorsInPast90Days','$EndpointHasPerformanceIssues','$DateTime')
+VALUES ('$EndpointSerial','$EndpointComputerName','$EndpointOS','$EndpointType','$EndpointSiteName','$EndpointCPUStatus','$CPUUtilization','$NumberOfCPUUtilizationErrorsToday','$NumberOfCPUUtilizationErrorsInPast30Days','$NumberOfCPUUtilizationErrorsInPast60Days','$NumberOfCPUUtilizationErrorsInPast90Days','$EndpointRAMStatus','$AvailableRAMInGB','$NumberOfRAMUtilizationErrorsToday','$NumberOfRAMUtilizationErrorsInPast30Days','$NumberOfRAMUtilizationErrorsInPast60Days','$NumberOfRAMUtilizationErrorsInPast90Days','$EndpointNetIntUploadStatus','$NetInterfaceUploadUtilizationInMbps','$NumberOfNetworkUtilizationUploadErrorsToday','$NumberOfNetworkUtilizationUploadErrorsInPast30Days','$NumberOfNetworkUtilizationUploadErrorsInPast60Days','$NumberOfNetworkUtilizationUploadErrorsInPast90Days','$EndpointNetIntDownloadStatus','$NetInterfaceDownloadUtilizationInMbps','$NumberOfNetworkUtilizationDownloadErrorsToday','$NumberOfNetworkUtilizationDownloadErrorsInPast30Days','$NumberOfNetworkUtilizationDownloadErrorsInPast60Days','$NumberOfNetworkUtilizationDownloadErrorsInPast90Days','$EndpointHasPerformanceIssues','$DateTime')
 END
 "@      
 
